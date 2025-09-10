@@ -13,9 +13,9 @@
 /.zed
 /auth.json
 /node_modules
-/public/build
-/public/hot
-/public/storage
+# /public/build (comentado para permitir pasta public)
+# /public/hot (comentado para permitir pasta public)
+# /public/storage (comentado para permitir pasta public)
 /storage/*.key
 /storage/pail
 /vendor
