@@ -115,6 +115,37 @@ create_env_files() {
     fi
 }
 
+# Função para verificar e corrigir problemas conhecidos
+check_and_fix_known_issues() {
+    print_step "Verificando problemas conhecidos..."
+    
+    # Verificar se composer.lock existe
+    if [ ! -f "backend/composer.lock" ]; then
+        print_warning "composer.lock não encontrado. Gerando automaticamente..."
+        generate_composer_lock
+    fi
+    
+    # Verificar se composer.json tem predis
+    if ! grep -q "predis/predis" backend/composer.json; then
+        print_warning "Dependência predis/predis não encontrada. Adicionando..."
+        fix_composer_issues
+    fi
+    
+    # Verificar se env.example tem configuração Redis correta
+    if ! grep -q "REDIS_CLIENT=predis" backend/env.example; then
+        print_warning "Configuração Redis incorreta. Corrigindo..."
+        fix_redis_issues
+    fi
+    
+    # Verificar se composer.lock está desatualizado
+    if [ -f "backend/composer.lock" ] && [ "backend/composer.json" -nt "backend/composer.lock" ]; then
+        print_warning "composer.lock está desatualizado. Regenerando..."
+        generate_composer_lock
+    fi
+    
+    print_success "Verificação de problemas concluída"
+}
+
 # Função para verificar dependências
 check_dependencies() {
     print_step "Verificando dependências..."
@@ -167,16 +198,127 @@ cleanup_environment() {
     print_success "Ambiente anterior limpo"
 }
 
+# Função para corrigir problemas de composer
+fix_composer_issues() {
+    print_step "Corrigendo problemas de dependências do Composer..."
+    
+    # Verificar se composer.lock existe
+    if [ ! -f "backend/composer.lock" ]; then
+        print_message "composer.lock não encontrado. Gerando automaticamente..." "$YELLOW"
+        generate_composer_lock
+        return
+    fi
+    
+    # Verificar se composer.lock está desatualizado
+    if [ "backend/composer.json" -nt "backend/composer.lock" ]; then
+        print_message "composer.lock está desatualizado. Regenerando..." "$YELLOW"
+        rm backend/composer.lock
+        generate_composer_lock
+        return
+    fi
+    
+    # Verificar se composer.json tem predis
+    if grep -q "predis/predis" backend/composer.json; then
+        print_message "Dependência predis/predis encontrada no composer.json" "$GREEN"
+    else
+        print_message "Adicionando predis/predis ao composer.json..." "$YELLOW"
+        # Adicionar predis se não existir
+        sed -i 's/"laravel\/tinker": "^2.10.1"/"laravel\/tinker": "^2.10.1",\n        "predis\/predis": "^2.2"/' backend/composer.json
+        # Regenerar composer.lock após adicionar dependência
+        generate_composer_lock
+    fi
+    
+    print_success "Problemas de Composer corrigidos"
+}
+
+# Função para gerar composer.lock
+generate_composer_lock() {
+    print_step "Gerando composer.lock..."
+    
+    # Verificar se composer está disponível
+    if ! command_exists composer; then
+        print_warning "Composer não está disponível localmente. Será gerado no container."
+        return
+    fi
+    
+    # Gerar composer.lock localmente
+    cd backend
+    
+    # Primeiro tentar composer install
+    if composer install --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs; then
+        print_success "composer.lock gerado com sucesso via composer install"
+        cd ..
+        return
+    fi
+    
+    # Se falhar, tentar composer update
+    print_warning "composer install falhou. Tentando composer update..."
+    if composer update --no-dev --optimize-autoloader --no-interaction --ignore-platform-reqs; then
+        print_success "composer.lock gerado com sucesso via composer update"
+        cd ..
+        return
+    fi
+    
+    # Se ainda falhar, tentar apenas composer install sem flags
+    print_warning "composer update falhou. Tentando composer install básico..."
+    if composer install --ignore-platform-reqs; then
+        print_success "composer.lock gerado com sucesso via composer install básico"
+        cd ..
+        return
+    fi
+    
+    # Se tudo falhar
+    print_warning "Falha ao gerar composer.lock localmente. Será gerado no container."
+    cd ..
+}
+
+# Função para corrigir problemas de Redis
+fix_redis_issues() {
+    print_step "Corrigindo problemas de Redis..."
+    
+    # Verificar se env.example tem configuração Redis correta
+    if grep -q "REDIS_CLIENT=predis" backend/env.example; then
+        print_message "Configuração Redis já está correta" "$GREEN"
+    else
+        print_message "Corrigindo configuração Redis..." "$YELLOW"
+        # Substituir phpredis por predis
+        sed -i 's/REDIS_CLIENT=phpredis/REDIS_CLIENT=predis/' backend/env.example
+    fi
+    
+    print_success "Problemas de Redis corrigidos"
+}
+
 # Função para construir e iniciar containers
 build_and_start() {
     print_step "Construindo e iniciando containers..."
     
-    # Construir e iniciar containers
+    # Tentar construir containers
     if docker-compose up --build -d; then
         print_success "Containers construídos e iniciados"
     else
-        print_error "Falha ao construir/iniciar containers"
-        exit 1
+        print_warning "Falha na primeira tentativa de build. Tentando correções automáticas..."
+        
+        # Verificar se é erro de composer.lock ou dependências
+        if docker-compose logs backend 2>/dev/null | grep -q "lock file is not up to date\|Class.*not found\|predis"; then
+            print_step "Detectado problema com dependências do Composer. Aplicando correção..."
+            fix_composer_issues
+        fi
+        
+        # Verificar se é erro de extensão Redis
+        if docker-compose logs backend 2>/dev/null | grep -q "redis"; then
+            print_step "Detectado problema com Redis. Aplicando correção..."
+            fix_redis_issues
+        fi
+        
+        # Tentar novamente após correções
+        print_step "Tentando build novamente após correções..."
+        if docker-compose up --build -d; then
+            print_success "Containers construídos e iniciados após correções"
+        else
+            print_error "Falha ao construir/iniciar containers mesmo após correções"
+            print_warning "Verifique os logs: docker-compose logs backend"
+            exit 1
+        fi
     fi
 }
 
@@ -206,6 +348,46 @@ wait_for_services() {
     
     # Aguardar um pouco mais para garantir que todos os serviços estejam prontos
     sleep 10
+}
+
+# Função para verificar e instalar Predis
+ensure_predis_installed() {
+    print_step "Verificando instalação do Predis..."
+    
+    # Aguardar o container backend ficar pronto
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if docker-compose exec -T backend php --version >/dev/null 2>&1; then
+            print_success "Container backend está pronto"
+            break
+        fi
+        
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
+        
+        if [ $attempt -gt $max_attempts ]; then
+            print_warning "Container backend não ficou pronto a tempo"
+            return 1
+        fi
+    done
+    
+    # Verificar se Predis está instalado
+    if ! docker-compose exec -T backend composer show predis/predis >/dev/null 2>&1; then
+        print_warning "Predis não encontrado. Instalando..."
+        if docker-compose exec -T backend composer require predis/predis; then
+            print_success "Predis instalado com sucesso"
+        else
+            print_error "Falha ao instalar Predis"
+            return 1
+        fi
+    else
+        print_success "Predis já está instalado"
+    fi
+    
+    return 0
 }
 
 # Função para configurar Laravel
@@ -357,11 +539,15 @@ main() {
     check_dependencies
     check_ports
     create_env_files
+    check_and_fix_known_issues
     
     # Configuração do ambiente
     cleanup_environment
     build_and_start
     wait_for_services
+    
+    # Verificar e instalar Predis
+    ensure_predis_installed
     
     # Configuração das aplicações
     configure_laravel

@@ -17,7 +17,7 @@ class UsuarioController extends Controller
     {
         // Cache com chave específica e expiração de 60 segundos
         $cacheKey = 'usuarios_lista_completa';
-        $cacheExpiration = 60; // 60 segundos
+        $cacheExpiration = 10; // 10 segundos
         
         // Tentar buscar do cache primeiro
         $usuarios = Cache::remember($cacheKey, $cacheExpiration, function () {

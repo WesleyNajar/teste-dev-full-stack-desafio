@@ -70,11 +70,11 @@ chmod +x setup.sh
 
 **Windows (PowerShell - Alternativa):**
 ```powershell
-# Use o script .bat em vez do .sh
-.\dev.bat build
+# Use o WSL para executar o script bash
+wsl ./setup.sh
 ```
 
-> ⚡ **O script fará tudo automaticamente**: construção dos containers, configuração do Laravel, execução das migrations, seeders e instalação das dependências.
+> ⚡ **O script fará tudo automaticamente**: construção dos containers, configuração do Laravel, execução das migrations, seeders, instalação das dependências (incluindo Predis), correção de problemas conhecidos e verificação de status dos serviços.
 
 #### 3️⃣ Acesse o Sistema
 Após a execução bem-sucedida do script, acesse:
@@ -215,27 +215,35 @@ docker-compose exec frontend npm run dev
 docker-compose exec frontend npm run build
 ```
 
-### 🛠️ Scripts de Desenvolvimento
+### 🛠️ Script de Configuração Inteligente
 
-**Linux/Mac/WSL:**
+**Para qualquer sistema operacional:**
 ```bash
-# Usar script de desenvolvimento
-./dev.sh help          # Ver todos os comandos
-./dev.sh logs          # Ver logs
-./dev.sh shell backend # Acessar backend
-./dev.sh migrate       # Executar migrations
-./dev.sh clean         # Limpar ambiente
+# Executar setup completo (recomendado)
+./setup.sh
 ```
 
-**Windows:**
-```cmd
-# Usar script de desenvolvimento
-dev.bat help          # Ver todos os comandos
-dev.bat logs          # Ver logs
-dev.bat shell backend # Acessar backend
-dev.bat migrate       # Executar migrations
-dev.bat clean         # Limpar ambiente
-```
+#### 🎯 **Funcionalidades do `setup.sh`:**
+
+**🔍 Verificações Automáticas:**
+- ✅ Verifica se Docker e Docker Compose estão instalados
+- ✅ Verifica se as portas necessárias estão livres
+- ✅ Detecta problemas conhecidos (composer.lock, Predis)
+
+**🔧 Correções Automáticas:**
+- ✅ Gera `composer.lock` se não existir
+- ✅ Adiciona `predis/predis` ao `composer.json` se necessário
+- ✅ Configura `REDIS_CLIENT=predis` no `env.example`
+- ✅ Instala Predis no container automaticamente
+
+**🚀 Configuração Completa:**
+- ✅ Cria arquivos `.env` a partir dos exemplos
+- ✅ Constrói e inicia todos os containers
+- ✅ Instala dependências (Predis, npm packages)
+- ✅ Configura Laravel (chave, cache, migrations)
+- ✅ Executa seeders (dados de teste)
+- ✅ Verifica status dos serviços
+- ✅ Testa conectividade dos endpoints
 
 ## 🌐 Portas e Serviços
 
@@ -352,10 +360,10 @@ docker-compose exec -T postgres psql -U laravel_user laravel_app < backup.sql
 ## 📞 Suporte e Contato
 
 ### 🆘 Em caso de problemas:
-1. **Verifique os logs**: `docker-compose logs -f`
-2. **Reinicie os containers**: `docker-compose restart`
-3. **Reconstrua o ambiente**: `docker-compose up --build -d`
-4. **Execute o setup novamente**: `./setup.sh`
+1. **Execute o setup novamente**: `./setup.sh` (recomendado)
+2. **Verifique os logs**: `docker-compose logs -f`
+3. **Reinicie os containers**: `docker-compose restart`
+4. **Reconstrua o ambiente**: `docker-compose up --build -d`
 
 ### 📋 Checklist de Verificação
 - [ ] Docker Desktop está rodando
@@ -369,9 +377,7 @@ docker-compose exec -T postgres psql -U laravel_user laravel_app < backup.sql
 ## 🎯 Informações Importantes
 
 ### 📁 Arquivos Principais
-- **`setup.sh`** - Script de configuração automática (Linux/Mac/WSL)
-- **`dev.sh`** - Script de desenvolvimento (Linux/Mac/WSL)
-- **`dev.bat`** - Script de desenvolvimento (Windows)
+- **`setup.sh`** - Script de configuração automática (funciona em todos os sistemas)
 - **`docker-compose.yml`** - Configuração dos containers
 - **`backend/env.example`** - Variáveis de ambiente do backend
 - **`frontend/env.example`** - Variáveis de ambiente do frontend
@@ -379,10 +385,11 @@ docker-compose exec -T postgres psql -U laravel_user laravel_app < backup.sql
 ### 🔧 Configurações Automáticas
 O projeto está configurado para funcionar automaticamente:
 - ✅ **Arquivos .env** são criados automaticamente a partir dos exemplos
-- ✅ **Dependências** são instaladas automaticamente
+- ✅ **Dependências** são instaladas automaticamente (Predis, npm packages)
 - ✅ **Banco de dados** é configurado com migrations e seeders
 - ✅ **Permissões** são ajustadas automaticamente
 - ✅ **Health checks** garantem que os serviços estejam prontos
+- ✅ **Problemas conhecidos** são corrigidos automaticamente (composer.lock, Redis)
 
 ### 🚀 Para Recrutadores
 Este projeto foi desenvolvido para ser **facilmente executável** em qualquer máquina:
@@ -391,9 +398,12 @@ Este projeto foi desenvolvido para ser **facilmente executável** em qualquer m�
 2. **Execute o setup**:
    - **Linux/Mac/WSL**: `./setup.sh`
    - **Windows**: Use o **Git Bash** (recomendado) e execute `./setup.sh`
+   - **Windows (PowerShell)**: `wsl ./setup.sh`
 3. **Acesse http://localhost**
 
 **Tempo estimado de setup**: 3-5 minutos (dependendo da velocidade da internet)
+
+> 🎯 **O script `setup.sh` faz TUDO automaticamente** - não é necessário executar comandos manuais!
 
 ### 💡 **Dica para Windows:**
 - **Git Bash** é a melhor opção para executar scripts bash
