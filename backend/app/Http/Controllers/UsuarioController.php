@@ -6,6 +6,7 @@ use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Cache;
 
 class UsuarioController extends Controller
 {
@@ -14,11 +15,21 @@ class UsuarioController extends Controller
      */
     public function index(): JsonResponse
     {
-        $usuarios = Usuario::with('produtos')->get();
+        // Cache com chave específica e expiração de 60 segundos
+        $cacheKey = 'usuarios_lista_completa';
+        $cacheExpiration = 60; // 60 segundos
+        
+        // Tentar buscar do cache primeiro
+        $usuarios = Cache::remember($cacheKey, $cacheExpiration, function () {
+            // Se não estiver no cache, buscar do banco de dados
+            return Usuario::with('produtos')->get();
+        });
         
         return response()->json([
             'success' => true,
-            'data' => $usuarios
+            'data' => $usuarios,
+            'cached' => Cache::has($cacheKey),
+            'cache_expires_in' => $cacheExpiration . ' segundos'
         ]);
     }
 
@@ -74,6 +85,9 @@ class UsuarioController extends Controller
 
 
             $usuario = Usuario::create($validated);
+            
+            // Limpar cache da lista de usuários após criar novo usuário
+            Cache::forget('usuarios_lista_completa');
             
             return response()->json([
                 'success' => true,
@@ -147,6 +161,9 @@ class UsuarioController extends Controller
 
             $usuario->update($validated);
             
+            // Limpar cache da lista de usuários após atualizar usuário
+            Cache::forget('usuarios_lista_completa');
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Usuário atualizado com sucesso',
@@ -203,6 +220,9 @@ class UsuarioController extends Controller
 
             $usuario->delete();
             
+            // Limpar cache da lista de usuários após excluir usuário
+            Cache::forget('usuarios_lista_completa');
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Usuário excluído com sucesso',
@@ -223,4 +243,5 @@ class UsuarioController extends Controller
             ], 500);
         }
     }
+
 }
